@@ -1,0 +1,5 @@
+node_modules
+data
+test-assets
+web/dist
+release/
