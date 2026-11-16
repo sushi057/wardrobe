@@ -18,6 +18,34 @@ are made with your own Google Gemini account. No sign-up, no subscription, no AP
 - **Keep a closet.** Your clothes get clean, background-free photos, sorted into tops, bottoms, shoes and more.
 - **Stay within your limits.** A small meter shows how many images you have left today.
 
+## A quick look
+
+*(Shown with a stand-in photo and sample clothes.)*
+
+**Try on.** Pick pieces from your closet and see the outfit on you.
+
+![Try on: a quilted bomber jacket on the stand-in photo](docs/readme/1-tryon-result.png)
+
+**Try before you buy.** Paste a shop link and the product joins your Wishlist, ready to try on.
+
+![Wishlist: shoes from a shop link tried on with the jacket](docs/readme/12-tryon-wishlist.png)
+
+**Looks.** Every try-on is kept, and the ones you save are pinned at the top.
+
+![Looks: saved outfits and all try-ons](docs/readme/3-looks.png)
+
+**Compare.** Two looks side by side, or drag a slider between them.
+
+![Compare: two outfits side by side](docs/readme/8-compare-side.png)
+
+**Closet.** Add photos of your clothes; they become clean product shots.
+
+![Closet: adding pieces](docs/readme/4-closet-add.png)
+
+**You.** Your photo, your image engine, and a meter for how many images you have left today.
+
+![You: photo, engine and daily usage](docs/readme/13-usage.png)
+
 ## Install (about 2 minutes)
 
 You need a **Mac** or a **Windows 10/11 PC**, **[Google Chrome](https://www.google.com/chrome/)**, and a
