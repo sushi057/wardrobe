@@ -26,7 +26,7 @@ export function LooksView({ w, open }: { w: Wardrobe; open: (itemIds: string[], 
           </div>
         )}
         {r && <ProviderTag provider={r.provider} model={r.model} className="absolute left-3 top-3" />}
-        {r && w.compareIds.includes(r.id) && <span className="absolute right-3 top-3 grid size-6 place-items-center rounded-full bg-ink text-[0.6875rem] text-paper">{'ABCD'[w.compareIds.indexOf(r.id)]}</span>}
+        {r && w.compareIds.includes(r.id) && <span className="absolute right-3 top-3 grid size-6 place-items-center rounded-full bg-ink text-[0.6875rem] text-paper">{'ABCDEFGH'[w.compareIds.indexOf(r.id)]}</span>}
         {r?.favorite && <span className="absolute bottom-3 right-3 grid size-7 place-items-center rounded-full bg-card text-accent shadow-float transition-opacity group-hover:opacity-0"><Heart size={13} strokeWidth={1.75} fill="currentColor" /></span>}
         <div className="absolute inset-x-3 bottom-3 flex translate-y-2 gap-1.5 rounded-full bg-card/95 p-1.5 opacity-0 shadow-float transition-all duration-300 ease-[var(--ease-out-expo)] group-hover:translate-y-0 group-hover:opacity-100">
           {itemIds.map((id) => byId.get(id) && <img key={id} src={byId.get(id)!.imageUrl} alt="" className="size-9 rounded-full bg-plate object-contain p-1 ring-1 ring-line" />)}
@@ -39,7 +39,7 @@ export function LooksView({ w, open }: { w: Wardrobe; open: (itemIds: string[], 
         </div>
         <div className="-mr-1.5 flex shrink-0 items-center">
         {r && (
-          <button onClick={() => { const res = w.toggleCompare(r.id); if (res === 'full') w.setToast('Compare holds 4 looks. Remove one first.') }} aria-pressed={w.compareIds.includes(r.id)} title={w.compareIds.includes(r.id) ? 'Remove from compare' : 'Add to compare'} className={`grid size-8 place-items-center rounded-full transition-opacity hover:bg-panel ${w.compareIds.includes(r.id) ? 'text-ink opacity-100' : 'text-ink-3 opacity-0 hover:text-ink group-hover:opacity-100 focus:opacity-100 pointer-coarse:opacity-100'}`}><Columns2 size={14} strokeWidth={1.75} /></button>
+          <button onClick={() => { const res = w.toggleCompare(r.id); if (res === 'full') w.setToast('Compare holds 8 looks. Remove one first.') }} aria-pressed={w.compareIds.includes(r.id)} title={w.compareIds.includes(r.id) ? 'Remove from compare' : 'Add to compare'} className={`grid size-8 place-items-center rounded-full transition-opacity hover:bg-panel ${w.compareIds.includes(r.id) ? 'text-ink opacity-100' : 'text-ink-3 opacity-0 hover:text-ink group-hover:opacity-100 focus:opacity-100 pointer-coarse:opacity-100'}`}><Columns2 size={14} strokeWidth={1.75} /></button>
         )}
         <button onClick={onDelete} aria-label="Delete" className="grid size-8 shrink-0 place-items-center rounded-full text-ink-3 opacity-0 transition-opacity hover:bg-panel hover:text-warn group-hover:opacity-100 focus:opacity-100 pointer-coarse:opacity-100"><Trash2 size={14} strokeWidth={1.75} /></button>
         </div>

@@ -43,5 +43,3 @@ export function childEnv(extra = {}) {
   return { ...process.env, [key]: `${path.dirname(process.execPath)}${sep}${process.env[key] || ''}`, NO_COLOR: '1', ...extra };
 }
 
-// OpenCLI always loads user adapters from ~/.opencli/clis (OPENCLI_CONFIG_DIR only moves profile config).
-export const ADAPTER_DIR = path.join(os.homedir(), '.opencli', 'clis', 'gemini');

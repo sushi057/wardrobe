@@ -29,12 +29,13 @@ export function useWardrobe() {
   const [revealId, setRevealId] = useState<string | null>(null)
   const [error, setError] = useState<RenderError | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+  const photoRef = useRef<string | undefined>(undefined)
   const selectedRef = useRef(selected)
   selectedRef.current = selected
 
   const refresh = useCallback(() => api.state().then(setState), [])
 
-  // Compare set (render ids, max 4), kept per browser across reloads.
+  // Compare set (render ids, max 8), kept per browser across reloads.
   const [compareIds, setCompareIds] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('wardrobe-compare') || '[]') } catch { return [] }
   })
@@ -42,7 +43,7 @@ export function useWardrobe() {
   /** Returns 'added' | 'removed' | 'full'. */
   const toggleCompare = useCallback((renderId: string): 'added' | 'removed' | 'full' => {
     if (compareIds.includes(renderId)) { setCompareIds(compareIds.filter((x) => x !== renderId)); return 'removed' }
-    if (compareIds.length >= 4) return 'full'
+    if (compareIds.length >= 8) return 'full'
     setCompareIds([...compareIds, renderId]); return 'added'
   }, [compareIds])
 
@@ -56,12 +57,16 @@ export function useWardrobe() {
         setState((s) => s && { ...s, queue: { current: e.current, pending: e.pending, cutouts: e.cutouts } })
       } else if (e.type === 'usage') {
         setState((s) => s && { ...s, usage: { ...s.usage, [e.usage.engine]: e.usage } })
+      } else if (e.type === 'stylist') {
+        refresh()
       } else if (e.type === 'item') {
         setState((s) => s && { ...s, items: s.items.map((i) => (i.id === e.item.id ? e.item : i)) })
       } else if (e.type === 'render') {
         const r: Render = e.render
         setState((s) => s && { ...s, renders: [...s.renders, r] })
-        if (r.baseId === activeRef.current) {
+        if (r.photoId !== photoRef.current) {
+          setToast('A try-on finished on one of your other photos')
+        } else if (r.baseId === activeRef.current) {
           // Still on the version it was made from: move forward to the new one.
           setActiveIdRaw(r.id)
           setSelected([])
@@ -83,6 +88,7 @@ export function useWardrobe() {
 
   const items = state?.items ?? []
   const photoId = state?.photo?.id
+  photoRef.current = photoId
 
   // Every version on the current photo, oldest first (the original photo sits before them).
   const versions = useMemo(
@@ -102,6 +108,18 @@ export function useWardrobe() {
     setActiveIdRaw(rid)
     setSelected([])
     setError(null)
+  }, [])
+
+  /** Make another of your photos the one in use; each keeps its own versions. */
+  const switchPhoto = useCallback(async (pid: string) => {
+    const next = await api.selectPhoto(pid)
+    setState((s) => (s ? { ...s, ...next } : next))
+    setActiveIdRaw(null); setSelected([]); setError(null)
+  }, [])
+  const removePhoto = useCallback(async (pid: string) => {
+    const next = await api.deletePhoto(pid)
+    setState((s) => (s ? { ...s, ...next } : next))
+    setActiveIdRaw(null); setSelected([]); setError(null)
   }, [])
 
   const toggle = useCallback((item: Item) => {
@@ -138,12 +156,12 @@ export function useWardrobe() {
     else { setActiveIdRaw(null); setSelected(ids); setError(null) }
   }, [state?.renders, setActiveId])
 
-  const liveCompare = compareIds.filter((id) => state?.renders.some((r) => r.id === id))
+  const liveCompare = compareIds.filter((id) => (id === 'original' ? !!state?.photo : state?.renders.some((r) => r.id === id)))
 
   return {
     compareIds: liveCompare, setCompareIds, toggleCompare,
     state, setState, refresh, items, selected, setSelected, toggle, tryOn,
-    versions, shownRender, baseOf, activeId, setActiveId, regenerate, openLook, renderJobs, revealId, setRevealId,
+    switchPhoto, removePhoto, versions, shownRender, baseOf, activeId, setActiveId, regenerate, openLook, renderJobs, revealId, setRevealId,
     renderingThis, renderJob, error: error && error.baseId === (shownRender?.id ?? null) ? error : null,
     toast, setToast,
   }

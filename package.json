@@ -6,7 +6,7 @@
     "server": "node --watch server/index.js",
     "web": "npm --prefix web run dev",
     "dev": "concurrently -k -n api,web -c magenta,cyan \"npm run server\" \"npm run web\"",
-    "adapters:install": "mkdir -p ~/.opencli/clis/gemini && cp adapters/gemini/tryon.js ~/.opencli/clis/gemini/tryon.js",
+    "adapters:install": "node server/adapter.js",
     "release": "node scripts/build-release.mjs"
   },
   "dependencies": {

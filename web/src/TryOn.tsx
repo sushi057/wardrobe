@@ -16,16 +16,26 @@ function useElapsed(since?: number) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
 
-export function PhotoDrop({ onDone, compact }: { onDone: () => void; compact?: boolean }) {
+export function PhotoDrop({ onDone, compact, tile }: { onDone: () => void; compact?: boolean; tile?: boolean }) {
   const input = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const [over, setOver] = useState(false)
   const [err, setErr] = useState<string | null>(null)
-  const send = async (f?: File) => {
-    if (!f) return
+  const send = async (f?: File | File[]) => {
+    const files = Array.isArray(f) ? f : f ? [f] : []
+    if (!files.length) return
     setBusy(true); setErr(null)
-    try { await api.uploadPhoto(f); onDone() } catch (e) { setErr((e as Error).message) } finally { setBusy(false) }
+    try { for (const one of files) await api.uploadPhoto(one); onDone() } catch (e) { setErr((e as Error).message) } finally { setBusy(false) }
   }
+  if (tile) return (
+    <>
+      <button onClick={() => input.current?.click()} disabled={busy} aria-label="Add a photo" className="grid w-full place-items-center rounded-xl border border-dashed border-line-strong text-ink-3 transition-colors hover:border-ink hover:text-ink disabled:opacity-60" style={{ aspectRatio: '3 / 4' }}>
+        <span className="flex flex-col items-center gap-1 text-meta"><Upload size={16} strokeWidth={1.75} />{busy ? 'Adding…' : 'Add'}</span>
+      </button>
+      <input ref={input} type="file" accept="image/*" multiple hidden onChange={(e) => { send(Array.from(e.target.files ?? [])); e.target.value = '' }} />
+      {err && <p className="col-span-full text-meta text-warn">{err}</p>}
+    </>
+  )
   if (compact) return (
     <>
       <Button size="sm" onClick={() => input.current?.click()} disabled={busy}><Upload size={15} strokeWidth={1.75} /> {busy ? 'Uploading…' : 'Replace photo'}</Button>
@@ -81,16 +91,12 @@ function RailButton({ icon, label, onClick, disabled, primary, onHold, active }:
 }
 
 /** Doji's docked pieces: white pills, thumbnail + two-line caption. */
-function Dock({ items, onRemove, onVersion }: { items: Item[]; onRemove: (i: Item) => void; onVersion: boolean }) {
+function Dock({ items, onRemove }: { items: Item[]; onRemove: (i: Item) => void }) {
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center px-4 pb-4">
       <motion.div layout className="pointer-events-auto flex max-w-full gap-2 overflow-x-auto p-1 [scrollbar-width:none]">
         <AnimatePresence mode="popLayout" initial={false}>
-          {items.length === 0 ? (
-            <motion.p key="empty" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex h-12 items-center rounded-full bg-card/95 px-5 text-label text-ink-2 shadow-float">
-              {onVersion ? 'Pick pieces to add to this version' : 'Pick pieces from your closet'}
-            </motion.p>
-          ) : items.map((i) => (
+          {items.map((i) => (
             <motion.div key={i.id} layout initial={{ opacity: 0, scale: 0.7, y: 14 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.7 }} transition={{ duration: 0.4, ease }} className="flex h-14 shrink-0 items-center gap-2.5 rounded-full bg-card/95 py-1 pl-1 pr-2 shadow-float">
               <img src={i.imageUrl} alt="" className="size-12 rounded-full bg-plate object-contain p-1.5 ring-1 ring-line" />
               <div className="min-w-0 max-w-[8.5rem] sm:max-w-[13rem]">
@@ -106,7 +112,7 @@ function Dock({ items, onRemove, onVersion }: { items: Item[]; onRemove: (i: Ite
   )
 }
 
-function Stage({ w, compare }: { w: Wardrobe; compare: boolean }) {
+function Stage({ w, compare, setCompare }: { w: Wardrobe; compare: boolean; setCompare: (v: boolean) => void }) {
   const reduce = useReducedMotion()
   const photo = w.state!.photo!
   const r = w.shownRender
@@ -121,7 +127,16 @@ function Stage({ w, compare }: { w: Wardrobe; compare: boolean }) {
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 lg:h-full">
     <div className="relative flex min-h-0 w-full flex-1 items-center justify-center">
-      <div className="relative h-full max-w-full overflow-hidden rounded-[20px] bg-panel" style={{ aspectRatio: `${photo.width} / ${photo.height}` }}>
+      <div
+        className={`relative h-full max-w-full touch-manipulation select-none overflow-hidden rounded-[20px] bg-panel ${r ? 'cursor-pointer' : ''}`}
+        style={{ aspectRatio: `${photo.width} / ${photo.height}`, WebkitTouchCallout: 'none' }}
+        title={r ? `Hold to see ${vLabel(before)}` : undefined}
+        onPointerDown={(e) => { if (r && e.button === 0) { (e.currentTarget as Element).setPointerCapture?.(e.pointerId); setCompare(true) } }}
+        onPointerUp={() => setCompare(false)}
+        onPointerCancel={() => setCompare(false)}
+        onContextMenu={(e) => e.preventDefault()}
+        onDragStart={(e) => e.preventDefault()}
+      >
         <img src={before?.url ?? photo.url} alt={before ? `You, ${vLabel(before)}` : 'You'} className="absolute inset-0 size-full object-cover" />
         <AnimatePresence initial={false}>
           {r && !compare && (
@@ -180,7 +195,7 @@ function Stage({ w, compare }: { w: Wardrobe; compare: boolean }) {
           )}
         </AnimatePresence>
 
-        <Dock items={selectedItems} onRemove={(i) => w.toggle(i)} onVersion={!!r} />
+        <Dock items={selectedItems} onRemove={(i) => w.toggle(i)} />
       </div>
     </div>
     <VersionStrip w={w} vLabel={vLabel} />
@@ -285,7 +300,7 @@ export function TryOnView({ w }: { w: Wardrobe }) {
     <div className="flex h-full min-h-0 flex-col gap-5 lg:flex-row lg:gap-12">
       <h1 className="sr-only">Try on</h1>
       <ClosetPanel w={w} />
-      <Stage w={w} compare={compare} />
+      <Stage w={w} compare={compare} setCompare={setCompare} />
       <div className="flex shrink-0 flex-row items-start justify-center gap-1 lg:w-[72px] lg:flex-col lg:items-center lg:justify-center lg:gap-5">
         {(() => {
           const u = s.usage?.[s.settings.engine]
@@ -317,7 +332,7 @@ export function TryOnView({ w }: { w: Wardrobe }) {
         <RailButton icon={<Columns2 size={18} strokeWidth={1.75} />} label={r && w.compareIds.includes(r.id) ? 'In compare' : 'Compare'} disabled={!r} active={!!r && w.compareIds.includes(r.id)} onClick={() => {
           if (!r) return
           const res = w.toggleCompare(r.id)
-          w.setToast(res === 'full' ? 'Compare holds 4 looks. Remove one first.' : res === 'added' ? `Added to Compare (${w.compareIds.length + 1} of 4)` : 'Removed from Compare')
+          w.setToast(res === 'full' ? 'Compare holds 8 looks. Remove one first.' : res === 'added' ? `Added to Compare (${w.compareIds.length + 1} of 8)` : 'Removed from Compare')
         }} />
         <a href={r?.url} download={r ? `look-${r.id}.jpg` : undefined} aria-disabled={!r} tabIndex={-1} className={r ? '' : 'pointer-events-none'}>
           <RailButton icon={<Download size={18} strokeWidth={1.75} />} label="Download" disabled={!r} />

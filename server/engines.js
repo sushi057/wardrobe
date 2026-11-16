@@ -59,7 +59,8 @@ async function opencliOnce(args, timeoutMs) {
     child.stdout.on('data', (d) => { out += d; });
     child.stderr.on('data', (d) => {
       err += d;
-      if (/\] sent \(/.test(err)) giveBack();
+      // Every adapter logs one of these right after the prompt is posted.
+      if (/\] (sent \(|generating|waiting for the answer)/.test(err)) giveBack();
     });
     const timer = setTimeout(() => {
       child.kill('SIGKILL');
@@ -100,25 +101,46 @@ const gemini = {
   },
 };
 
+// ChatGPT and Qwen attach images from the page (OpenCLI's own `chatgpt image --image` needs a file path Chrome can't read from WSL).
 const chatgpt = {
   id: 'chatgpt',
   label: 'ChatGPT',
   model: 'ChatGPT web (GPT Image)',
-  async edit({ prompt, images, outDir }) {
-    const rows = await opencli(['chatgpt', 'image', prompt, '--image', images.join(','), '--op', outDir]);
-    const file = cleanPath(rows.find((r) => String(r.file || '').includes('/'))?.file);
+  async edit({ prompt, images, outDir, name }) {
+    const rows = await opencli(['chatgpt', 'tryon', prompt, '--image', images.join(','), '--op', outDir, '--name', name]);
+    const file = cleanPath(rows[0]?.file);
     if (!file) throw new EngineError('no_image', 'ChatGPT returned no file');
     return file;
   },
 };
 
-export const ENGINES = { gemini, chatgpt };
-// Planned (need custom OpenCLI adapters): qwen, copilot, meta.
+const qwen = {
+  id: 'qwen',
+  label: 'Qwen',
+  model: 'Qwen web (Image Edit)',
+  async edit({ prompt, images, outDir, name }) {
+    const rows = await opencli(['qwen', 'tryon', prompt, '--image', images.join(','), '--op', outDir, '--name', name]);
+    const file = cleanPath(rows[0]?.file);
+    if (!file) throw new EngineError('no_image', 'Qwen returned no file');
+    return file;
+  },
+};
+
+export const ENGINES = { gemini, chatgpt, qwen };
+// Not available for renders:
+//  - copilot: adapter written but needs a one-time image-consent click in Copilot first.
+//  - meta: uploads fine but Meta AI refuses to edit photos of real people, so it powers the Stylist instead.
 export const PLANNED_ENGINES = [
-  { id: 'qwen', label: 'Qwen' },
-  { id: 'copilot', label: 'Copilot' },
-  { id: 'meta', label: 'Meta AI' },
+  { id: 'copilot', label: 'Copilot', note: 'Needs a one-time image consent in Copilot' },
+  { id: 'meta', label: 'Meta AI', note: 'Used by the Stylist, not for try-ons' },
 ];
+
+/** Ask Meta AI a text question in a fresh chat (Stylist). Returns { text, links, images, link }. */
+export async function askMeta(prompt) {
+  const rows = await opencli(['meta', 'ask', prompt, '--timeout', '200'], 300_000);
+  if (!rows[0]?.text) throw new EngineError('no_image', 'Meta AI returned no answer');
+  return rows[0];
+}
 
 // Status checks run in OpenCLI's background window so they never pull Chrome to the front.
 async function geminiStatus() {

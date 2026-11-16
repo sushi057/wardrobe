@@ -1,22 +1,24 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { Check, Monitor, Moon, Sun } from 'lucide-react'
+import { Check, Monitor, Moon, Sun, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { api, type Health } from './api'
 import { ClosetView } from './Closet'
 import { CompareView } from './Compare'
 import { type LimitDraft, UsageCard, UsageRing } from './Usage'
 import { LooksView } from './Looks'
+import { StylistView } from './Stylist'
 import { useWardrobe } from './store'
 import { ReportButton, SetupView, useSetup } from './Setup'
 import { PhotoDrop, TryOnView } from './TryOn'
 import { Button, ease } from './ui'
 
-type View = 'tryon' | 'looks' | 'compare' | 'closet' | 'you'
+type View = 'tryon' | 'looks' | 'compare' | 'closet' | 'stylist' | 'you'
 const TABS: { id: View; label: string }[] = [
   { id: 'tryon', label: 'Try on' },
   { id: 'looks', label: 'Looks' },
   { id: 'compare', label: 'Compare' },
   { id: 'closet', label: 'Closet' },
+  { id: 'stylist', label: 'Stylist' },
   { id: 'you', label: 'You' },
 ]
 
@@ -104,17 +106,32 @@ function YouView({ w, health }: { w: ReturnType<typeof useWardrobe>; health: Ret
     <div className="relative h-full overflow-y-auto">
       <div className="pb-32">
         <h1 className="text-display">You</h1>
-        <p className="mt-3 text-body text-ink-2">Your photo, the engine that dresses you, how the app looks, and how much of your free allowance it may use.</p>
-        <div className="mt-12 grid grid-cols-1 gap-12 lg:grid-cols-[340px_minmax(0,600px)] lg:gap-20">
-          <section aria-labelledby="you-photo">
-            <h2 id="you-photo" className="text-title">Your photo</h2>
+        <p className="mt-3 text-body text-ink-2">Your photos, the engine that dresses you, how the app looks, and how much of your free allowance it may use.</p>
+        <div className="mt-12 grid grid-cols-1 gap-12 lg:grid-cols-[minmax(320px,1fr)_minmax(0,1.15fr)] xl:grid-cols-[minmax(340px,1fr)_minmax(0,1.1fr)_minmax(0,1fr)] xl:gap-14">
+          <section aria-labelledby="you-photo" className="min-w-0">
+            <h2 id="you-photo" className="text-title">Your photos</h2>
+            <p className="mt-2 max-w-[44ch] text-meta text-ink-2">Keep a few and switch between them. Each photo has its own try-ons.</p>
             <div className="mt-5">
               {s.photo ? (
                 <>
-                  <img src={s.photo.url} alt="Your photo" className="aspect-[3/4] w-full rounded-[16px] bg-panel object-cover" />
-                  <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
-                    <PhotoDrop compact onDone={w.refresh} />
-                    <p className="text-meta text-ink-3">Replacing it clears your try-ons.</p>
+                  <img src={s.photo.url} alt="Photo in use" className="w-full rounded-[16px] bg-panel object-cover" style={{ aspectRatio: `${s.photo.width} / ${s.photo.height}`, maxHeight: '68vh' }} />
+                  <div className="mt-4 grid grid-cols-4 gap-2 sm:grid-cols-5 lg:grid-cols-4 2xl:grid-cols-5">
+                    {s.photos.map((p, i) => {
+                      const on = p.id === s.photo!.id
+                      return (
+                        <div key={p.id} className="group relative">
+                          <button onClick={() => !on && w.switchPhoto(p.id).catch((e) => w.setToast(e.message))} aria-pressed={on} aria-label={`Photo ${i + 1}${on ? ' (in use)' : ''}`}
+                            className={`block w-full overflow-hidden rounded-xl bg-panel transition-[box-shadow,opacity] ${on ? 'shadow-[0_0_0_2px_var(--color-ink)]' : 'opacity-75 ring-1 ring-line hover:opacity-100'}`} style={{ aspectRatio: '3 / 4' }}>
+                            <img loading="lazy" decoding="async" src={p.url} alt="" className="size-full object-cover" />
+                          </button>
+                          {s.photos.length > 1 && (
+                            <button onClick={() => { if (confirm('Remove this photo and its try-ons?')) w.removePhoto(p.id).catch((e) => w.setToast(e.message)) }} aria-label={`Remove photo ${i + 1}`}
+                              className="absolute right-1 top-1 grid size-6 place-items-center rounded-full bg-card/95 text-ink-2 opacity-0 shadow-float transition-opacity hover:text-ink focus:opacity-100 group-hover:opacity-100 pointer-coarse:opacity-100"><X size={13} strokeWidth={2} /></button>
+                          )}
+                        </div>
+                      )
+                    })}
+                    <PhotoDrop tile onDone={w.refresh} />
                   </div>
                 </>
               ) : (
@@ -123,7 +140,7 @@ function YouView({ w, health }: { w: ReturnType<typeof useWardrobe>; health: Ret
             </div>
           </section>
 
-          <div className="space-y-14">
+          <div className="min-w-0 space-y-14">
             <section aria-labelledby="you-engine">
               <h2 id="you-engine" className="text-title">Image engine</h2>
               <p className="mt-2 max-w-[56ch] text-meta text-ink-2">Runs in your own Chrome{health.h?.profile ? <> on the <span className="text-ink">{health.h.profile}</span> profile</> : ''}, through OpenCLI. Every image is tagged with the engine that made it.</p>
@@ -137,7 +154,12 @@ function YouView({ w, health }: { w: ReturnType<typeof useWardrobe>; health: Ret
                         <span className={`grid size-4 place-items-center rounded-full ring-1 ${active ? 'ring-ink' : 'ring-line-strong'}`}>{active && <motion.span layoutId="engine-dot" className="size-2 rounded-full bg-ink" />}</span>
                         <span className={`text-body ${e.available ? 'text-ink' : 'text-ink-3'}`}>{e.label}</span>
                       </span>
-                      <span className="mt-1 block pl-[26px] text-meta text-ink-3">{e.available ? e.model : 'Coming next'}</span>
+                      <span className="mt-1 block pl-[26px] text-meta text-ink-3">{e.available ? e.model : e.note ?? 'Coming next'}</span>
+                      {s.usage?.[e.id] && (() => {
+                        const l = draft.limits[e.id] ?? { limit: s.usage[e.id].limit, pct: s.usage[e.id].pct }
+                        const n = Math.max(1, Math.floor((l.limit * l.pct) / 100))
+                        return <span className="mt-2 block pl-[26px] text-meta"><span className="tabular text-ink">{n} images/day</span> <span className="tabular text-ink-3">· {l.pct}% of {l.limit}</span></span>
+                      })()}
                     </button>
                   )
                 })}
@@ -180,7 +202,8 @@ function YouView({ w, health }: { w: ReturnType<typeof useWardrobe>; health: Ret
                 })}
               </div>
             </section>
-
+          </div>
+          <div className="min-w-0 lg:col-span-2 xl:col-span-1">
             <section aria-labelledby="you-usage">
               <h2 id="you-usage" className="text-title">Usage</h2>
               <p className="mt-2 max-w-[56ch] text-meta text-ink-2">Try-ons and cleanups both count as images, over a rolling 24 hours. The app stops at the usable share so you never hit the provider’s wall mid-render.</p>
@@ -276,6 +299,7 @@ export default function App() {
             {view === 'looks' && <LooksView w={w} open={(ids, rid) => { w.openLook(ids, rid); setView('tryon') }} />}
             {view === 'compare' && <CompareView w={w} onBack={() => setView('looks')} onWear={(r) => { w.setActiveId(r.id); setView('tryon') }} />}
             {view === 'closet' && <ClosetView w={w} />}
+            {view === 'stylist' && <StylistView w={w} />}
             {view === 'you' && <YouView w={w} health={health} />}
           </motion.div>
         </AnimatePresence>

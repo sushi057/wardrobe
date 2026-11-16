@@ -37,9 +37,15 @@ export interface Render {
 }
 export interface Look { id: string; name: string; itemIds: string[]; renderId: string | null; createdAt: number }
 export interface Job { id: string; type: 'render' | 'cutout'; key?: string; baseId?: string | null; itemId?: string; engine: string; stage: string; startedAt?: number; error?: { code: string; message: string } }
-export interface Engine { id: string; label: string; model?: string; available: boolean }
+export interface StylistPiece { name: string; category: Category; why: string; product: string; shop: string; url: string | null }
+export interface StylistMessage {
+  id: string; role: 'user' | 'assistant'; text?: string; intro?: string; outro?: string; pieces?: StylistPiece[]; link?: string
+  error?: { code: string; message: string }; createdAt: number
+}
+export interface Engine { id: string; label: string; model?: string; note?: string; available: boolean }
 export interface State {
   photo: { id: string; url: string; width: number; height: number } | null
+  photos: { id: string; url: string; width: number; height: number; createdAt: number }[]
   items: Item[]
   renders: Render[]
   looks: Look[]
@@ -47,6 +53,7 @@ export interface State {
   engines: Engine[]
   queue: { current: Job | null; pending: Job | null; cutouts: number }
   usage: Record<string, Usage>
+  stylist: { messages: StylistMessage[]; busy: { startedAt: number } | null }
 }
 export interface ScanResult { candidates: string[]; title: string; price: string; store: string; brand?: string; via: 'server' | 'browser' }
 export interface Usage {
@@ -72,11 +79,15 @@ export const api = {
     const fd = new FormData(); fd.append('file', file)
     return fetch('/api/photo', { method: 'POST', body: fd }).then(json<State>)
   },
+  selectPhoto: (id: string) => fetch(`/api/photo/${id}/select`, { method: 'PUT' }).then(json<State>),
+  deletePhoto: (id: string) => fetch(`/api/photo/${id}`, { method: 'DELETE' }).then(json<State>),
   addItem: (file: File, category: Category, name: string, wishlist = false) => {
     const fd = new FormData(); fd.append('file', file); fd.append('category', category); fd.append('name', name)
     if (wishlist) fd.append('owned', 'false')
     return fetch('/api/items', { method: 'POST', body: fd }).then(json<Item>)
   },
+  askStylist: (prompt: string) => post('/api/stylist', { prompt }).then(json<{ ok: true }>),
+  clearStylist: () => fetch('/api/stylist', { method: 'DELETE' }).then(json<State>),
   scan: (url: string) => post('/api/import/scan', { url }).then(json<ScanResult>),
   addFromUrl: (body: { imageUrl: string; pageUrl: string; category: Category; name: string; price?: string; store?: string }) => post('/api/items/from-url', body).then(json<Item>),
   markBought: (id: string) => fetch(`/api/items/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ owned: true }) }).then(json<Item>),
@@ -100,8 +111,8 @@ export const CATEGORIES = Object.keys(CATEGORY_LABEL) as Category[]
 
 export const ERROR_COPY: Record<string, string> = {
   no_image: 'The model answered with text instead of an image. Try again, or switch engine.',
-  not_logged_in: 'You are signed out of the engine in the research Chrome profile. Sign in there, then retry.',
-  profile_disconnected: 'Chrome (research profile) is not connected to OpenCLI. Open Chrome with that profile and retry.',
+  not_logged_in: 'You are signed out of this AI site in Chrome. Sign in to it there, then retry.',
+  profile_disconnected: 'Chrome is not connected to OpenCLI. Open Chrome, check the OpenCLI extension is on, then retry.',
   timeout: 'The engine took longer than 4 minutes. Retry when the browser is idle.',
   upload_failed: 'Your photos did not attach in the browser. Retry; if it repeats, reload the engine tab.',
   limit: 'You’ve reached the usable share of today’s free allowance. Wait for it to free up, or raise the limit in You → Usage.',

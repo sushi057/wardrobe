@@ -12,6 +12,9 @@ are made with your own Google Gemini account. No sign-up, no subscription, no AP
 - **Try before you buy.** Paste a shop link; Wardrobe grabs the product photo and puts it on you.
 - **Build on a look.** Every try-on is saved as a version, so you can add one more piece or go back a step.
 - **Compare.** Put two looks side by side, or drag a slider between them.
+- **Ask the Stylist.** Get outfit ideas with links to shops, from Meta AI.
+- **Several photos.** Keep up to 12 photos of yourself (different poses or outfits), each with its own try-ons.
+- **Pick your AI.** Gemini by default; ChatGPT and Qwen work too if you're signed in to them.
 - **Keep a closet.** Your clothes get clean, background-free photos, sorted into tops, bottoms, shoes and more.
 - **Stay within your limits.** A small meter shows how many images you have left today.
 
@@ -53,6 +56,8 @@ That's it. Upload your photo and start trying things on.
   free plan; if you pay for Gemini, raise the number under **You → Usage**.
 - **It drives the Gemini website**, so if Google changes Gemini, a try-on can stop working until Wardrobe is updated.
 - **Only use the OpenCLI extension in one Chrome profile** (the one you use for Gemini).
+- **The Stylist uses Meta AI**, and ChatGPT / Qwen are optional engines: sign in to those sites in the same Chrome
+  if you want to use them.
 
 ## Something not working?
 
@@ -126,7 +131,14 @@ server and OpenCLI's daemon (installers call it before swapping files).
   installed copies pin). After upgrading OpenCLI or a Gemini UI change, re-run one try-on to check it still works.
 - `opencli --profile research gemini probe "<js>"` (adapters/gemini/probe.js) evaluates JS in the Gemini tab, which
   helps when selectors break.
-- Prompts are in `server/prompts.js`. Bump `PROMPT_VERSION` when you change them; it is part of the render cache key.
+- Engines: Gemini, ChatGPT and Qwen render try-ons with Wardrobe's own adapters in `adapters/` (shared helpers in
+  `adapters/lib.js`). They attach images from the page, since OpenCLI's file-path upload can't reach files from WSL.
+  Each engine needs its site signed in, in the same Chrome profile. The server copies all adapters into
+  `~/.opencli/clis/<site>/` (and `lib.js` to `~/.opencli/wardrobe-lib.js`) on start; `npm run adapters:install` does it by hand.
+- Copilot: adapter not finished. Copilot shows a one-time "Before we get started" image consent that you must accept yourself.
+- Meta AI refuses to edit photos of real people, so it powers the Stylist tab (text + shop links via `opencli meta ask`)
+  instead of try-ons.
+- Data lives in `data/` (git-ignored). Prompts are in `server/prompts.js`. Bump `PROMPT_VERSION` when you change them; it is part of the render cache key.
 - Gemini web won't post a message with 3+ attachments from automation, so multi-piece try-ons send your photo plus
   one numbered garment sheet (`garmentSheet` in `server/index.js`).
 - Shop links: the server fetches the page itself (blocking local/private addresses); shops that block it are opened

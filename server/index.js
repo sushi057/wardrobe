@@ -4,12 +4,13 @@ import sharp from 'sharp';
 import fs from 'node:fs';
 import path from 'node:path';
 import { customAlphabet } from 'nanoid';
-import { ENGINES, PLANNED_ENGINES, EngineError, health, setupStatus } from './engines.js';
+import { ENGINES, PLANNED_ENGINES, EngineError, health, setupStatus, askMeta } from './engines.js';
+import { parseAnswer, stylistPrompt } from './stylist.js';
 import { DATA, PORT, ROOT } from './config.js';
 import { recordJob, setupLogging } from './log.js';
 import { buildReport } from './report.js';
+import { installAdapters } from './adapter.js';
 setupLogging();
-import { installAdapter } from './adapter.js';
 import { PROMPT_VERSION, cutoutPrompt, tryOnPrompt } from './prompts.js';
 import { downloadImage, scanProductPage } from './importer.js';
 
@@ -20,8 +21,13 @@ const id = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz', 10);
 const CATEGORIES = ['top', 'bottom', 'dress', 'outerwear', 'shoes', 'accessory'];
 
 // ---------- store ----------
-let db = { photo: null, items: [], renders: [], looks: [], settings: { engine: 'gemini' }, usage: [], limits: {} };
+let db = { stylist: [], photo: null, photos: [], items: [], renders: [], looks: [], settings: { engine: 'gemini' }, usage: [], limits: {} };
 if (fs.existsSync(DB_PATH)) db = { ...db, ...JSON.parse(fs.readFileSync(DB_PATH, 'utf8')) };
+// Several photos; db.photo is the one in use. Older data files hold a single photo.
+db.photos ||= [];
+if (db.photo && !db.photos.some((p) => p.id === db.photo.id)) db.photos.unshift(db.photo);
+db.photo = db.photos.find((p) => p.id === db.photo?.id) ?? db.photos[0] ?? null;
+const MAX_PHOTOS = 12;
 
 // ---------- usage limits ----------
 // Free-tier image allowances (researched 2026-11-15). Neither vendor publishes a hard number today:
@@ -33,6 +39,7 @@ const DEFAULT_LIMITS = {
   // New installs assume the free plan (safest); each person can raise it on You → Usage. Saved limits are kept.
   gemini: { plan: 'Gemini free', limit: 20, pct: 70, note: 'Last published Nano Banana cap for free accounts (AI Plus: 50, AI Pro: 100). Gemini now refreshes every 5 h up to a weekly cap.', source: 'https://support.google.com/gemini/answer/16275805' },
   chatgpt: { plan: 'ChatGPT Free', limit: 3, pct: 70, note: 'OpenAI says “limited”; free users report about 3 images per rolling 24 h.', source: 'https://help.openai.com/en/articles/9275245-chatgpt-free-tier-faq' },
+  qwen: { plan: 'Qwen Free', limit: 20, pct: 70, note: 'Qwen Chat does not publish a fixed image cap for free accounts; 20 a day is a cautious estimate you can change.', source: 'https://chat.qwen.ai/' },
 };
 const WINDOW_MS = 24 * 60 * 60 * 1000;
 db.usage ||= [];
@@ -96,6 +103,10 @@ function emit(event) {
   const msg = `data: ${JSON.stringify(event)}\n\n`;
   for (const res of clients) res.write(msg);
 }
+
+// One browser job at a time: renders, cleanups and Stylist questions all drive the same Chrome profile.
+let browserChain = Promise.resolve();
+const withBrowser = (fn) => { const run = browserChain.then(fn, fn); browserChain = run.then(() => {}, () => {}); return run; };
 
 // ---------- job queue: concurrency 1, latest render wins ----------
 let current = null;
@@ -161,7 +172,7 @@ async function runJob(job) {
     return;
   }
   // render
-  const photo = db.photo;
+  const photo = db.photos.find((p) => p.id === job.photoId) ?? db.photo;
   const base = job.baseId ? db.renders.find((r) => r.id === job.baseId) : null;
   if (job.baseId && !base) throw new EngineError('unknown', 'The version you started from was deleted');
   const items = job.itemIds.map((iid) => db.items.find((i) => i.id === iid)).filter(Boolean);
@@ -194,7 +205,7 @@ async function pump() {
   current = job; job.stage = 'running'; job.startedAt = Date.now();
   publishQueue();
   try {
-    await runJob(job);
+    await withBrowser(() => runJob(job));
     job.stage = 'done';
     recordJob({ type: job.type, engine: job.engine || 'gemini', ok: true, seconds: Math.round((Date.now() - job.startedAt) / 1000) });
   } catch (e) {
@@ -256,6 +267,7 @@ function renderView(r) { return { baseId: null, addedIds: r.itemIds, ...r, url: 
 function state() {
   return {
     photo: db.photo && { ...db.photo, url: fileUrl(db.photo.file) },
+    photos: db.photos.map((p) => ({ id: p.id, url: fileUrl(p.file), width: p.width, height: p.height, createdAt: p.createdAt })),
     items: db.items.map(itemView),
     renders: db.renders.map(renderView),
     looks: db.looks,
@@ -266,10 +278,13 @@ function state() {
     ],
     queue: { current: jobView(current), pending: jobView(pendingRender), cutouts: cutoutQueue.length },
     categories: CATEGORIES,
+    stylist: { messages: db.stylist.slice(-40), busy: stylistBusy },
     usage: Object.fromEntries(Object.keys(db.limits).map((k) => [k, usageFor(k)])),
   };
 }
 
+// ---------- stylist (Meta AI) ----------
+let stylistBusy = null; // { startedAt }
 // ---------- routes ----------
 const app = express();
 app.use(express.json({ limit: '100kb' }));
@@ -329,18 +344,36 @@ app.post('/api/quit', (req, res) => {
 
 app.post('/api/photo', upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'file required' });
+  if (db.photos.length >= MAX_PHOTOS) return res.status(400).json({ error: `You can keep ${MAX_PHOTOS} photos. Remove one first.` });
   try {
     const { name, width, height } = await ingest(req.file.buffer, 'photo', 2048);
-    if (db.photo) {
-      rm(db.photo.file);
-      for (const r of db.renders) rm(r.file);
-      db.renders = [];
-      for (const l of db.looks) l.renderId = null;
-    }
-    db.photo = { id: id(), file: name, width, height, createdAt: Date.now() };
+    const photo = { id: id(), file: name, width, height, createdAt: Date.now() };
+    db.photos.push(photo);
+    db.photo = photo; // the new photo becomes the one in use; the others stay
     save();
     res.json(state());
   } catch (e) { res.status(400).json({ error: 'Could not read image: ' + e.message }); }
+});
+
+app.put('/api/photo/:id/select', (req, res) => {
+  const p = db.photos.find((x) => x.id === req.params.id);
+  if (!p) return res.sendStatus(404);
+  db.photo = p; save(); res.json(state());
+});
+
+app.delete('/api/photo/:id', (req, res) => {
+  const p = db.photos.find((x) => x.id === req.params.id);
+  if (!p) return res.sendStatus(404);
+  if ((current?.type === 'render' && current.photoId === p.id) || pendingRender?.photoId === p.id) return res.status(409).json({ error: 'A try-on is running on this photo. Wait for it to finish.' });
+  rm(p.file);
+  const dead = db.renders.filter((r) => r.photoId === p.id);
+  for (const r of dead) rm(r.file);
+  const deadIds = new Set(dead.map((r) => r.id));
+  db.renders = db.renders.filter((r) => r.photoId !== p.id);
+  for (const l of db.looks) if (deadIds.has(l.renderId)) l.renderId = null;
+  db.photos = db.photos.filter((x) => x !== p);
+  if (db.photo?.id === p.id) db.photo = db.photos[db.photos.length - 1] ?? null;
+  save(); res.json(state());
 });
 
 app.post('/api/items', upload.single('file'), async (req, res) => {
@@ -430,7 +463,7 @@ app.post('/api/renders', (req, res) => {
   if (current?.key === key) return res.json({ queued: true, key, job: jobView(current) });
   const u = usageFor(engine);
   if (u?.blocked) return res.status(429).json({ error: new LimitError(u).message, code: 'limit', usage: u });
-  pendingRender = { id: id(), type: 'render', key, itemIds, baseId, engine, stage: 'queued' };
+  pendingRender = { id: id(), type: 'render', key, photoId: db.photo.id, itemIds, baseId, engine, stage: 'queued' };
   pump();
   publishQueue();
   res.json({ queued: true, key, job: jobView(pendingRender || current) });
@@ -476,6 +509,33 @@ app.put('/api/limits/:engine', (req, res) => {
   res.json(u);
 });
 
+app.post('/api/stylist', (req, res) => {
+  const prompt = String(req.body.prompt || '').trim().slice(0, 600);
+  if (!prompt) return res.status(400).json({ error: 'Ask the stylist something' });
+  if (stylistBusy) return res.status(409).json({ error: 'The stylist is still answering your last question' });
+  const userMsg = { id: id(), role: 'user', text: prompt, createdAt: Date.now() };
+  db.stylist.push(userMsg);
+  stylistBusy = { startedAt: Date.now() };
+  save();
+  emit({ type: 'stylist' });
+  const closet = db.items.filter((i) => i.owned !== false).map((i) => ({ name: i.name, category: i.category }));
+  withBrowser(() => askMeta(stylistPrompt(prompt, closet)))
+    .then((row) => {
+      const parsed = parseAnswer(row);
+      db.stylist.push({ id: id(), role: 'assistant', ...parsed, text: parsed.pieces.length ? '' : row.text.slice(0, 2000), link: row.link, createdAt: Date.now() });
+    })
+    .catch((e) => {
+      db.stylist.push({ id: id(), role: 'assistant', error: { code: e.code || 'unknown', message: String(e.message || e).slice(0, 300) }, createdAt: Date.now() });
+    })
+    .finally(() => { stylistBusy = null; db.stylist = db.stylist.slice(-80); save(); emit({ type: 'stylist' }); });
+  res.status(202).json({ ok: true });
+});
+
+app.delete('/api/stylist', (_req, res) => {
+  if (stylistBusy) return res.status(409).json({ error: 'The stylist is still answering' });
+  db.stylist = []; save(); res.json(state());
+});
+
 app.put('/api/settings', (req, res) => {
   if (ENGINES[req.body.engine]) db.settings.engine = req.body.engine;
   if (['source-serif', 'newsreader', 'manrope', 'geist'].includes(req.body.font)) db.settings.font = req.body.font;
@@ -494,7 +554,7 @@ if (fs.existsSync(path.join(DIST, 'index.html'))) {
 
 const server = app.listen(PORT, '127.0.0.1', () => {
   console.log(`wardrobe on http://localhost:${PORT}`);
-  installAdapter();
+  installAdapters();
   for (const it of db.items) if (it.cutoutStatus === 'queued') queueCutout(it);
 });
 server.on('error', (e) => {

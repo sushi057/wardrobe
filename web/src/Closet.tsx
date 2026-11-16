@@ -26,15 +26,18 @@ export function CategoryChips({ items, value, onChange }: { items: Item[]; value
 }
 
 /** Doji product cell: white, hairline-separated, product centred, two-line caption. */
-export function ItemCell({ item, selected, onClick, actions }: { item: Item; selected?: boolean; onClick?: () => void; actions?: React.ReactNode }) {
+/** worn: the piece is already on the version on stage, so it can't be added again. */
+export function ItemCell({ item, selected, onClick, actions, worn }: { item: Item; selected?: boolean; onClick?: () => void; actions?: React.ReactNode; worn?: { label: string; thumb: string } }) {
   const busy = item.cutoutStatus === 'queued' || item.cutoutStatus === 'running'
   return (
     <motion.div layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3, ease }} className="group relative bg-card">
       <button
         onClick={onClick}
+        disabled={!!worn}
         aria-pressed={selected}
-        aria-label={`${item.name || SINGULAR[item.category]}${selected ? ', in outfit' : ''}`}
-        className="block w-full text-left"
+        aria-label={`${item.name || SINGULAR[item.category]}${selected ? ', in outfit' : ''}${worn ? `, already worn in ${worn.label}` : ''}`}
+        title={worn ? `Already on you in ${worn.label}` : undefined}
+        className="block w-full text-left disabled:cursor-default"
       >
         <div className="relative aspect-square overflow-hidden bg-plate">
           <img
@@ -43,8 +46,16 @@ export function ItemCell({ item, selected, onClick, actions }: { item: Item; sel
             src={item.imageUrl}
             alt=""
             draggable={false}
-            className={`absolute inset-0 size-full transition-transform duration-500 ease-[var(--ease-out-expo)] group-hover:scale-[1.04] ${item.cutoutUrl ? 'object-contain p-[14%] mix-blend-multiply' : 'object-cover'} ${busy ? 'tile-pulse' : ''}`}
+            className={`absolute inset-0 size-full transition-transform duration-500 ease-[var(--ease-out-expo)] group-hover:scale-[1.04] ${item.cutoutUrl ? 'object-contain p-[14%] mix-blend-multiply' : 'object-cover'} ${busy ? 'tile-pulse' : ''} ${worn ? 'opacity-45 group-hover:scale-100' : ''}`}
           />
+          <AnimatePresence>
+            {worn && (
+              <motion.span initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} transition={{ duration: 0.25, ease }} className="absolute inset-x-3 bottom-3 flex h-8 items-center gap-2 rounded-full bg-card py-1 pl-1 pr-3 text-meta text-ink shadow-float">
+                <img src={worn.thumb} alt="" className="size-6 shrink-0 rounded-full object-cover object-top ring-1 ring-line" />
+                <span className="truncate">Wearing in {worn.label}</span>
+              </motion.span>
+            )}
+          </AnimatePresence>
           {busy && (
             <span className="absolute inset-x-3 bottom-3 flex h-7 items-center justify-center gap-1.5 rounded-full bg-card/95 text-meta text-ink shadow-float">
               <span className="size-1.5 rounded-full bg-accent tile-pulse" />
@@ -286,7 +297,7 @@ export function ClosetPanel({ w }: { w: Wardrobe }) {
               <div className="mt-5 min-h-0 flex-1 overflow-y-auto pb-4">
                 <HairlineGrid cols="grid-cols-3 lg:grid-cols-2">
                   <AnimatePresence>
-                    {shown.map((item) => <ItemCell key={item.id} item={item} selected={w.selected.includes(item.id)} onClick={() => w.toggle(item)} />)}
+                    {shown.map((item) => <ItemCell key={item.id} item={item} selected={w.selected.includes(item.id)} onClick={() => w.toggle(item)} worn={w.shownRender?.itemIds.includes(item.id) ? { label: `V${w.versions.findIndex((v) => v.id === w.shownRender!.id) + 1}`, thumb: w.shownRender.url } : undefined} />)}
                   </AnimatePresence>
                 </HairlineGrid>
               </div>
