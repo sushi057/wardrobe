@@ -29,9 +29,12 @@ export function profileProblem() {
 
 // Installed copies ship their own pinned OpenCLI in node_modules (no PATH needed). The owner's dev
 // checkout has none, so it keeps using the global `opencli` and never fights it over the daemon.
-const LOCAL_OPENCLI = path.join(ROOT, 'node_modules', '@jackwener', 'opencli', 'dist', 'src', 'main.js');
+// Source setups (scripts/setup.sh / setup.ps1) put theirs in .runtime/.
+const OPENCLI_MAIN = path.join('@jackwener', 'opencli', 'dist', 'src', 'main.js');
+export const LOCAL_OPENCLI = [path.join(ROOT, 'node_modules', OPENCLI_MAIN), path.join(ROOT, '.runtime', 'node_modules', OPENCLI_MAIN)]
+  .find((p) => fs.existsSync(p)) || null;
 export function opencliCommand(args) {
-  if (fs.existsSync(LOCAL_OPENCLI)) return { cmd: process.execPath, argv: [LOCAL_OPENCLI, ...args] };
+  if (LOCAL_OPENCLI) return { cmd: process.execPath, argv: [LOCAL_OPENCLI, ...args] };
   if (process.platform === 'win32') throw new Error('OpenCLI is missing from this install. Run the Wardrobe install line again.');
   return { cmd: 'opencli', argv: args };
 }

@@ -101,8 +101,10 @@ async function stop() {
     try { await fetch(`http://127.0.0.1:${PORT}/api/quit`, { method: 'POST' }); } catch { /* exiting */ }
     for (let i = 0; i < 20 && (await ping()); i += 1) await new Promise((r) => setTimeout(r, 250));
   }
-  const opencli = path.join(APP, 'node_modules', '@jackwener', 'opencli', 'dist', 'src', 'main.js');
-  if (fs.existsSync(opencli)) {
+  // Bundled copy (installer) or .runtime/ (source setup); a dev checkout has neither and is left alone.
+  const opencli = ['node_modules', path.join('.runtime', 'node_modules')]
+    .map((d) => path.join(APP, d, '@jackwener', 'opencli', 'dist', 'src', 'main.js')).find((p) => fs.existsSync(p));
+  if (opencli) {
     spawnSync(process.execPath, [opencli, 'daemon', 'stop'], { cwd: os.homedir(), stdio: 'ignore', windowsHide: true, timeout: 15_000 });
   }
 }

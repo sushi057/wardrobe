@@ -66,6 +66,22 @@ Wardrobe with you. It contains settings and error logs, never your photos, and y
 
 If the installer itself fails, it shows (and opens) a file called `install.log`. Send that one instead.
 
+### If the one-line install doesn't work
+
+You can set Wardrobe up from this page instead. It installs everything it needs into its own folder.
+
+1. Click the green **Code** button above, then **Download ZIP**, and unzip it somewhere easy to find, like your
+   Documents folder. (Or, if you use Git: `git clone https://github.com/sushi057/wardrobe.git`.)
+2. Run the setup:
+   - **Mac:** open **Terminal**, type `cd ` (with a space), drag the unzipped `wardrobe` folder onto the Terminal
+     window, press Enter, then paste `sh scripts/setup.sh` and press Enter.
+   - **Windows:** open the unzipped folder, go into `scripts`, and double-click **`setup.cmd`**.
+     (If Windows asks whether to run it, choose *More info → Run anyway*.)
+3. Wardrobe opens in Chrome with the same two setup steps as above.
+
+**Next time:** Mac: `sh scripts/start.sh` in that folder (in Terminal). Windows: double-click `scripts\start.cmd`.
+**If setup fails,** it opens a file called `setup.log` (in `data/logs`). Send it to whoever shared Wardrobe with you.
+
 **Uninstall:** delete the Wardrobe folder (Mac: `~/.wardrobe`; Windows: `%LOCALAPPDATA%\Wardrobe`) and the Wardrobe
 app / shortcuts. Remove the OpenCLI extension from Chrome if you don't use it for anything else.
 
